@@ -1,0 +1,4 @@
+pyyaml
+pymongo
+pika
+git+git://github.com/jawadtahir/paramiko#egg=paramiko
