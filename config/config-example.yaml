@@ -1,0 +1,10 @@
+data_collection_interval: 60
+data_end_time: null
+mongo_host: 127.0.0.1
+mongo_port: 27017
+node_name: EUWESTEUFH05
+nodes_private_key: /home/locator/thesis/ADGLV/key.pem
+nodes_private_key_passphrase: PASS
+nodes_yaml_path: /home/locator/thesis/ADGLV/config/nodes.yaml
+pipeline_yaml_path: /home/locator/thesis/ADGLV/config/pipeline.yaml
+thread_count: 
