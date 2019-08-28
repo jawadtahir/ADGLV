@@ -27,29 +27,18 @@ class GLVTool(object):
         self._log = logging.getLogger(__name__)
 
     def execute_pipeline(self):
-        file = logging.FileHandler("app.log")
-        file.setLevel(logging.DEBUG)
-        self._log.addHandler(file)
-
         self._log.debug('Reading config YAML')
         config = yaml.load(open(self.config_yaml_path, "r"))
-        #config = obj(config)
 
         nodes = config[NODES_YAML_PATH]
 
+        self._log.debug('Reading nodes YAML')
         nodes = yaml.load(open(nodes, "r"))
-        #nodes = obj(nodes)
 
+        self._log.debug('Creating pipeline')
         pipeline = TestPipelineQ()
         pipeline.config = config
         pipeline.nodes = nodes[NODES_LIST]
 
+        self._log.debug('Executing pipeline')
         pipeline.execute()
-
-
-if __name__ == "__main__":
-    project_root = Path(
-        __file__).parent.parent.parent.parent.parent.absolute()
-    os.environ[GLV_TOOL_ROOT] = str(project_root)
-    config_path = os.path.join(project_root, "config", "config.yaml")
-    GLVTool(config_path).execute_pipeline()

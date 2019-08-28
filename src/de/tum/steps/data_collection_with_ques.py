@@ -6,7 +6,6 @@ Created on Aug 15, 2019
 from abc import ABC, abstractmethod
 from datetime import datetime
 import json
-import logging
 import os
 from threading import Thread
 import time
@@ -18,6 +17,7 @@ from de.tum.measurement.auth_delta import ssh_connect_to_node
 from de.tum.measurement.pinger import pinger
 from de.tum.steps.models import Step, CollectionTaskMessage
 from de.tum.util.Constants import *
+import logging as log
 
 
 class WorkerCallback(ABC):
@@ -64,7 +64,7 @@ class DataCollectionWorker(Thread):
         super().__init__()
         self.collection_callback = collection_callback
         self.collectoin_type = collection_type
-        self._log = logging.getLogger(__name__)
+        self._log = log.getLogger(__name__)
 
     def run(self):
         if self.collection_callback is None:
@@ -90,8 +90,8 @@ class DataCollectionStepQ(Step):
         Constructor
         '''
         super().__init__(name)
-        self._log = logging.getLogger(__name__)
-        self._log.setLevel(logging.DEBUG)
+        self._log = log.getLogger(__name__)
+        self._log.setLevel(log.DEBUG)
 
     def work(self, config, **kwargs):
 
@@ -103,12 +103,10 @@ class DataCollectionStepQ(Step):
             DATA_COLLECTION_INTERVAL) is None else config[DATA_COLLECTION_INTERVAL]
         node_name = "1337" if config.get(
             NODE_NAME) is None else config[NODE_NAME]
-
-#         thread_count = os.cpu_count() if config.get(
-#             THREAD_COUNT) is None else config[THREAD_COUNT]
-
-        thread_count = 1 if config.get(
+        thread_count = os.cpu_count() if config.get(
             THREAD_COUNT) is None else config[THREAD_COUNT]
+
+        self._log.debug("Creating measurement workers...")
 
         for _ in range(thread_count):
             DataCollectionWorker(SSH_DELAY,
@@ -116,19 +114,23 @@ class DataCollectionStepQ(Step):
             DataCollectionWorker(MTR_DELAY,
                                  MTRCallback(config)).start()
 
-        self._log.debug("Executing work")
-        t_now = datetime.now()
-        with pika.BlockingConnection(pika.ConnectionParameters(host='localhost')) as q_connection:
-            channel = q_connection.channel()
+        self._log.debug("Creating RabbitMQ connection...")
 
+        with pika.BlockingConnection(pika.ConnectionParameters(host='localhost')) as q_connection:
+
+            channel = q_connection.channel()
             channel.queue_declare(queue=MTR_DELAY, durable=False)
             channel.queue_declare(queue=SSH_DELAY, durable=False)
 
+            t_now = datetime.now()
             while (end_time - t_now).total_seconds() > 0:
                 t_now = datetime.now()
                 for target_node_name, target_node_adrs in nodes.items():
                     task_message = CollectionTaskMessage(
                         node_name, t_now, target_node_name, target_node_adrs, config[NODES_PRIVATE_KEY], config[NODES_PRIVATE_KEY_PASSPHRASE])
+
+                    self._log.debug(
+                        "Publishing...")
 
                     channel.basic_publish(
                         exchange='', routing_key=SSH_DELAY, body=json.dumps(vars(task_message), default=str))
@@ -137,3 +139,5 @@ class DataCollectionStepQ(Step):
 
                 time.sleep(measure_interval)
                 t_now = datetime.now()
+
+            self._log.debug("Measurement finished")

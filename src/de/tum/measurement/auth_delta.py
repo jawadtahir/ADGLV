@@ -15,12 +15,9 @@ from de.tum.util.Constants import *
 from nodes import Nodes
 
 
-SSH_PORT = 22
-
-
 def ssh_connect_to_node(node_name, t_now, node_adrs, private_key, passphrase):
-    try:
-        client = SSHProbeClient()
+
+    with SSHProbeClient() as client:
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -30,17 +27,3 @@ def ssh_connect_to_node(node_name, t_now, node_adrs, private_key, passphrase):
             node_adrs, pkey=private_key, passphrase=passphrase)
 
         return Measurement(node_name, node_adrs, r_time,  t_now, vars(ssh_delay), SSH_DELAY)
-
-    except Exception as e:
-        print("*** Caught exception: %s: %s" % (e.__class__, e))
-        traceback.print_exc()
-        try:
-            client.close()
-        except:
-            pass
-        sys.exit(1)
-
-
-if __name__ == '__main__':
-    for node in Nodes().nodes_list:
-        ssh_connect_to_node(node)
