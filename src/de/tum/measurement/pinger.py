@@ -13,8 +13,8 @@ from de.tum.util.Constants import *
 
 def pinger(node_name, t_now, node_adrs, **kwargs):
     m_time = datetime.utcnow()
-#     command = r"mtr --json --max-ttl 250 --tcp --port 22 --show-ips " + node_adrs
-    command = r"mtr --json --max-ttl 250 --port 22 --show-ips " + node_adrs
+    command = r"mtr --json --max-ttl 250 --tcp --port 22 --show-ips " + node_adrs
+#     command = r"mtr --json --max-ttl 250 --port 22 --show-ips " + node_adrs
     output = os.popen(command).read()
     mtr_reponse = json.loads(output)
 

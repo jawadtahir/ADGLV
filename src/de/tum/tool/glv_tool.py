@@ -12,7 +12,7 @@ import yaml
 
 from de.tum.util.Constants import *
 from de.tum.util.utils import get_logger
-from pipeline import TestPipeline, TestPipelineQ
+from pipeline import TestPipelineQ
 
 
 class GLVTool(object):
