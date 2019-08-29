@@ -11,6 +11,7 @@ import sys
 import yaml
 
 from de.tum.util.Constants import *
+from de.tum.util.utils import get_logger
 from pipeline import TestPipeline, TestPipelineQ
 
 
@@ -24,7 +25,7 @@ class GLVTool(object):
         Constructor
         '''
         self.config_yaml_path = config_yaml_path
-        self._log = logging.getLogger(__name__)
+        self._log = get_logger(__name__)
 
     def execute_pipeline(self):
         self._log.debug('Reading config YAML')

@@ -3,7 +3,7 @@ Created on Aug 15, 2019
 
 @author: foobar
 '''
-import logging
+from de.tum.util.utils import get_logger
 
 
 class Pipeline(object):
@@ -18,7 +18,7 @@ class Pipeline(object):
         self.steps = steps
         self.config = config
         self.nodes = nodes
-        self.log = logging.getLogger(__name__)
+        self.log = get_logger(__name__)
 
     def execute(self):
         self.log.debug("Executing test_pipeline steps...")

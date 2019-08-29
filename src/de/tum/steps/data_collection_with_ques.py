@@ -17,12 +17,13 @@ from de.tum.measurement.auth_delta import ssh_connect_to_node
 from de.tum.measurement.pinger import pinger
 from de.tum.steps.models import Step, CollectionTaskMessage
 from de.tum.util.Constants import *
-import logging as log
+from de.tum.util.utils import get_logger
 
 
 class WorkerCallback(ABC):
     def __init__(self, config):
         self.config = config
+        self._log = get_logger(__name__)
 
     @abstractmethod
     def callback_function(self, ch, method, properties, body):
@@ -43,6 +44,9 @@ class SSHCallback(WorkerCallback):
             collection = db['data_collection']
             collection.insert(vars(measurement))
 
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        self._log.debug('SSH stored')
+
 
 class MTRCallback(WorkerCallback):
 
@@ -58,13 +62,16 @@ class MTRCallback(WorkerCallback):
             collection = db['data_collection']
             collection.insert(vars(measurement))
 
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        self._log.debug('MTR stored')
+
 
 class DataCollectionWorker(Thread):
     def __init__(self, collection_type: str, collection_callback: WorkerCallback=None):
         super().__init__()
         self.collection_callback = collection_callback
         self.collectoin_type = collection_type
-        self._log = log.getLogger(__name__)
+        self._log = get_logger(__name__)
 
     def run(self):
         if self.collection_callback is None:
@@ -90,8 +97,7 @@ class DataCollectionStepQ(Step):
         Constructor
         '''
         super().__init__(name)
-        self._log = log.getLogger(__name__)
-        self._log.setLevel(log.DEBUG)
+        self._log = get_logger(__name__)
 
     def work(self, config, **kwargs):
 
@@ -122,22 +128,22 @@ class DataCollectionStepQ(Step):
             channel.queue_declare(queue=MTR_DELAY, durable=False)
             channel.queue_declare(queue=SSH_DELAY, durable=False)
 
-            t_now = datetime.now()
+            t_now = datetime.utcnow()
             while (end_time - t_now).total_seconds() > 0:
-                t_now = datetime.now()
+                t_now = datetime.utcnow()
+                self._log.debug("Publishing at " + str(t_now))
                 for target_node_name, target_node_adrs in nodes.items():
-                    task_message = CollectionTaskMessage(
-                        node_name, t_now, target_node_name, target_node_adrs, config[NODES_PRIVATE_KEY], config[NODES_PRIVATE_KEY_PASSPHRASE])
+                    if not target_node_name.strip().lower() == node_name.strip().lower():
+                        task_message = CollectionTaskMessage(
+                            node_name, str(t_now), target_node_name, target_node_adrs, config[NODES_PRIVATE_KEY], config[NODES_PRIVATE_KEY_PASSPHRASE])
 
-                    self._log.debug(
-                        "Publishing...")
+                        channel.basic_publish(
+                            exchange='', routing_key=SSH_DELAY, body=json.dumps(vars(task_message), default=str))
+                        channel.basic_publish(
+                            exchange='', routing_key=MTR_DELAY, body=json.dumps(vars(task_message), default=str))
 
-                    channel.basic_publish(
-                        exchange='', routing_key=SSH_DELAY, body=json.dumps(vars(task_message), default=str))
-                    channel.basic_publish(
-                        exchange='', routing_key=MTR_DELAY, body=json.dumps(vars(task_message), default=str))
-
+                self._log.debug("Sleeping...")
                 time.sleep(measure_interval)
-                t_now = datetime.now()
+                t_now = datetime.utcnow()
 
             self._log.debug("Measurement finished")

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 import logging
 from de.tum.models import Config
+from de.tum.util.utils import get_logger
 
 
 class Step(ABC):
@@ -22,7 +23,7 @@ class Step(ABC):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        self.log = logging.getLogger(__name__)
+        self.log = get_logger(__name__)
 
     def pre_work(self):
         pass
