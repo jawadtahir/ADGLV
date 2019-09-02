@@ -16,8 +16,6 @@ class Pipeline(object):
         Constructor
         '''
         self.steps = steps
-        self.config = config
-        self.nodes = nodes
         self.log = get_logger(__name__)
 
     def execute(self):
@@ -32,7 +30,7 @@ class Pipeline(object):
             step.pre_check()
 
             self.log.debug("Work...")
-            step.work(self.config, nodes=self.nodes)
+            step.work()
 
             self.log.debug("Post-Work...")
             step.post_work()

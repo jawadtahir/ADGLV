@@ -3,11 +3,14 @@ Created on Aug 15, 2019
 
 @author: foobar
 '''
+import os
+
 from de.tum.measurement.auth_delta import ssh_connect_to_node
 from de.tum.measurement.pinger import pinger
 from de.tum.pipeline.models import Pipeline
 from de.tum.steps.data_collection import DataCollectionStep
 from de.tum.steps.data_collection_with_ques import DataCollectionStepQ
+from de.tum.util.Constants import NODES_YAML_PATH
 
 
 class TestPipeline(Pipeline):
@@ -28,4 +31,5 @@ class TestPipeline(Pipeline):
 class TestPipelineQ(Pipeline):
     def __init__(self):
         super().__init__(None, None, None)
-        self.steps = [DataCollectionStepQ("data_collection_step_queue")]
+        self.steps = [DataCollectionStepQ(
+            "data_collection_step_queue", os.environ.get(NODES_YAML_PATH, str(os.path.join("/ADGLV", "config", "nodes.yaml"))))]

@@ -4,8 +4,12 @@ Created on Aug 29, 2019
 @author: foobar
 '''
 import logging
+import os
+from de.tum.util.Constants import LOG_FILE_PATH
 
-fh = logging.FileHandler('app.log')
+
+log_file_path = os.environ.get(LOG_FILE_PATH, "app.log")
+fh = logging.FileHandler(log_file_path)
 fh.setLevel(logging.DEBUG)
 # create console handler with a higher log level
 ch = logging.StreamHandler()

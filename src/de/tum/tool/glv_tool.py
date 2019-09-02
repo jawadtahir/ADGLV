@@ -20,26 +20,16 @@ class GLVTool(object):
     classdocs
     '''
 
-    def __init__(self, config_yaml_path):
+    def __init__(self):
         '''
         Constructor
         '''
-        self.config_yaml_path = config_yaml_path
         self._log = get_logger(__name__)
 
     def execute_pipeline(self):
-        self._log.debug('Reading config YAML')
-        config = yaml.load(open(self.config_yaml_path, "r"))
-
-        nodes = config[NODES_YAML_PATH]
-
-        self._log.debug('Reading nodes YAML')
-        nodes = yaml.load(open(nodes, "r"))
 
         self._log.debug('Creating pipeline')
         pipeline = TestPipelineQ()
-        pipeline.config = config
-        pipeline.nodes = nodes[NODES_LIST]
 
         self._log.debug('Executing pipeline')
         pipeline.execute()
