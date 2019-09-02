@@ -88,7 +88,9 @@ class DataCollectionWorker(Thread):
             self._log.debug('Collection callback not provided')
             raise ValueError('Collection callback not provided')
 
-        with pika.BlockingConnection(pika.ConnectionParameters('localhost')) as q_connection:
+        rabbitmq_host = os.environ.get(RABBITMQ_HOST, "localhost")
+
+        with pika.BlockingConnection(pika.ConnectionParameters(rabbitmq_host)) as q_connection:
 
             channel = q_connection.channel()
             channel.queue_declare(queue=self.collectoin_type)
@@ -126,6 +128,8 @@ class DataCollectionStepQ(Step):
         private_key_passphrase = os.environ.get(
             NODES_PRIVATE_KEY_PASSPHRASE, None)
 
+        rabbitmq_host = os.environ.get(RABBITMQ_HOST, "localhost")
+
         self._log.debug('Reading nodes YAML')
         self.nodes = yaml.load(open(self.nodes, "r"))
         self.nodes = self.nodes[NODES_LIST]
@@ -142,7 +146,7 @@ class DataCollectionStepQ(Step):
         self._log.debug("Creating RabbitMQ connection...")
 
         try:
-            with pika.BlockingConnection(pika.ConnectionParameters(host='localhost')) as q_connection:
+            with pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host)) as q_connection:
 
                 channel = q_connection.channel()
                 channel.queue_declare(queue=SSH_DELAY, durable=False)
@@ -165,6 +169,3 @@ class DataCollectionStepQ(Step):
                 self._log.debug("Measurement finished")
         except:
             print_exc()
-        finally:
-            for worker in self.thread_array:
-                worker.kill()

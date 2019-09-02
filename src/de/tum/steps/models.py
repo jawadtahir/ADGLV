@@ -5,7 +5,6 @@ Created on Aug 15, 2019
 '''
 from abc import ABC, abstractmethod
 from datetime import datetime
-import logging
 from de.tum.models import Config
 from de.tum.util.utils import get_logger
 
