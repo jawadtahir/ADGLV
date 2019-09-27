@@ -1,6 +1,12 @@
 pyyaml
 pymongo
 pika
+pandas
+numpy
+tensorflow
+tensorflow-datasets
+matplotlib
+scikit-learn
 git+git://github.com/jawadtahir/paramiko#egg=paramiko
 
 

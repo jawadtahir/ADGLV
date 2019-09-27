@@ -5,7 +5,6 @@ Created on Aug 15, 2019
 '''
 from abc import ABC, abstractmethod
 from datetime import datetime
-from de.tum.models import Config
 from de.tum.util.utils import get_logger
 
 
@@ -31,7 +30,7 @@ class Step(ABC):
         pass
 
     @abstractmethod
-    def work(self, config: Config, **kwargs):
+    def work(self, **kwargs):
         raise NotImplementedError(self.name + " has no work")
 
     def post_work(self):

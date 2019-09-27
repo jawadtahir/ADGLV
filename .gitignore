@@ -70,3 +70,9 @@ config/config\.yaml
 config/nodes\.py
 
 config/nodes\.yaml
+
+*.csv
+
+docker-compose-mongo\.yml
+
+docker-compose\.yml

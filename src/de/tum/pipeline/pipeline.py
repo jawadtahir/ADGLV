@@ -5,12 +5,16 @@ Created on Aug 15, 2019
 '''
 import os
 
+import yaml
+
 from de.tum.measurement.auth_delta import ssh_connect_to_node
 from de.tum.measurement.pinger import pinger
 from de.tum.pipeline.models import Pipeline
 from de.tum.steps.data_collection import DataCollectionStep
 from de.tum.steps.data_collection_with_ques import DataCollectionStepQ
-from de.tum.util.Constants import NODES_YAML_PATH
+from de.tum.steps.feature_vector_generation import FeatureVectorGeneration
+from de.tum.steps.training import ADGLVDNNClassifier
+from de.tum.util.Constants import NODES_YAML_PATH, NODES_LIST
 
 
 class TestPipeline(Pipeline):
@@ -33,3 +37,33 @@ class TestPipelineQ(Pipeline):
         super().__init__(None, None, None)
         self.steps = [DataCollectionStepQ(
             "data_collection_step_queue", os.environ.get(NODES_YAML_PATH, str(os.path.join("/ADGLV", "config", "nodes.yaml"))))]
+
+
+class FeatureGenPipeline(Pipeline):
+    def __init__(self):
+        super().__init__(None, None, None)
+        node_path = os.environ.get(NODES_YAML_PATH, str(
+            os.path.join("/ADGLV", "config", "nodes.yaml")))
+        nodes = yaml.load(open(node_path))
+        self.steps = [FeatureVectorGeneration(
+            "feat_vec_step", nodes[NODES_LIST])]
+
+
+class ExDNN(Pipeline):
+    def __init__(self):
+        Pipeline.__init__(self, None, None, None)
+        node_path = os.environ.get(NODES_YAML_PATH, str(
+            os.path.join("/ADGLV", "config", "nodes.yaml")))
+        nodes = yaml.load(open(node_path))
+        self.steps = [
+            FeatureVectorGeneration("feat_vec_step", nodes[NODES_LIST]),
+            ADGLVDNNClassifier("adglv_dnn_classifier")
+        ]
+
+
+class DNNOnly(Pipeline):
+    def __init__(self):
+        Pipeline.__init__(self, None, None, None)
+        self.steps = [
+            ADGLVDNNClassifier("adglv_dnn_classifier")
+        ]

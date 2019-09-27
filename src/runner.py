@@ -21,6 +21,6 @@ if __name__ == "__main__":
     logger.debug("***************************************")
 
     # wait for rabbbitMQ to set up
-    time.sleep(10)
+    # time.sleep(10)
 
     GLVTool().execute_pipeline()
