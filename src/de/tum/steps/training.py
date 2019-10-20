@@ -10,6 +10,7 @@ from traceback import print_exc
 from sklearn import metrics
 from tensorflow.python.data import Dataset
 
+
 from de.tum.steps.models import Step
 from de.tum.util.Constants import *
 from de.tum.util.utils import get_logger
@@ -19,26 +20,42 @@ import pandas as pd
 import tensorflow as tf
 
 
-TRAINING_RATIO = 0.8
+DAYS_VOCAB = {"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
 
 
 class ADGLVDNNClassifier(Step):
     '''
-    classdocs
+    DNN classifier for the 
     '''
 
-    def __init__(self, name):
+    def __init__(self):
         '''
         Constructor
         '''
-        super().__init__(name)
+        super().__init__("adglv_dnn_classifier")
         self._log = get_logger(__name__)
         self.base_loc_data_map = {}
 
     def pre_work(self):
+        '''
+        Perform data cleaning
+        '''
         feature_csv_dir = os.environ.get(
-            FEATURE_CSV_DIR, os.path.join("/ADGLV", "data"))
+            FEATURE_CSV_DIR, os.path.join("/ADGLV", "feat"))
+        dataset_training_ratio = os.environ.get(
+            TRAIN_DATASET_TRAINING_RATIO, 0.8)
+        percentile_upper_limit = os.environ.get(
+            TRAIN_DATASET_UPPER_CUT_OFF, 0.99)
+        percentile_lower_limit = os.environ.get(
+            TRAIN_DATASET_LOWER_CUT_OFF, 0.01)
+
+        self.training_ratio = dataset_training_ratio
+
         self._log.debug("Feature CSV Dir: " + feature_csv_dir)
+        self._log.debug("Datatset cleaning upper limit: " +
+                        percentile_upper_limit)
+        self._log.debug("Datatset cleaning lower limit: " +
+                        percentile_lower_limit)
 
         self.base_locs = os.environ[TRAIN_NODES_CSV]
         self.base_locs = [base_loc.strip()
@@ -53,11 +70,14 @@ class ADGLVDNNClassifier(Step):
             groups = dataset.groupby("label")
             landmarks = groups.groups.keys()
             for landmark in landmarks:
+
                 landmark_measurement = groups.get_group(landmark)
-                limits = landmark_measurement["time_delta"].quantile([
-                                                                     0.01, 0.99])
+
+                limits = landmark_measurement["time_delta"].quantile(
+                    [percentile_lower_limit, percentile_upper_limit])
+
                 filtered_data_ids = landmark_measurement["time_delta"].between(
-                    limits[0.01], limits[0.99], True)
+                    limits[percentile_lower_limit], limits[percentile_upper_limit], True)
                 filtered_data = landmark_measurement[filtered_data_ids]
 
                 if self.base_loc_data_map.get(base_loc) is not None:
@@ -88,9 +108,9 @@ class ADGLVDNNClassifier(Step):
             """
 
             # Convert pandas data into a dict of np arrays.
-#             features = {key: np.array(value)
-#                         for key, value in dict(features).items()}
-            features = {"time_delta": np.array(features)}
+            features = {key: np.array(value)
+                        for key, value in dict(features).items()}
+#             features = {"time_delta": np.array(features)}
 
             targets = np.array(targets)
 
@@ -158,9 +178,14 @@ class ADGLVDNNClassifier(Step):
 #             optimizer = tf.keras.optimizers.Adagrad(
 #                 learning_rate=learning_rate)
 
+            feat_cat_col = tf.feature_column.categorical_column_with_vocabulary_list(
+                "m_day", DAYS_VOCAB)
+
             dnn_regressor = tf.estimator.DNNClassifier(
                 feature_columns=[
-                    tf.feature_column.numeric_column("time_delta")],
+                    tf.feature_column.numeric_column("time_delta"), ],
+                #                     tf.feature_column.numeric_column("m_time"), ],
+                #                     tf.feature_column.indicator_column(feat_cat_col)],
                 hidden_units=hidden_units,
                 n_classes=n_classes,
                 optimizer=tf.train.AdagradOptimizer(
@@ -247,20 +272,26 @@ class ADGLVDNNClassifier(Step):
             steps = int(steps)
 
             hidden_units_csv = os.environ.get(
-                TRAIN_HIDDEN_UNITS, "10,10,10,10,10,10")
+                TRAIN_HIDDEN_UNITS, "10,10,10,10,10")
             hidden_units = [int(unit) for unit in hidden_units_csv.split(",")]
 
             dataset = dataset.reindex(np.random.permutation(dataset.index))
 
             data_size = len(dataset)
-            training_data_size = int(data_size * TRAINING_RATIO)
+            training_data_size = int(data_size * self.training_ratio)
 
             training_data = dataset.head(training_data_size)
-            training_feature = training_data["time_delta"].copy()
+#             training_feature = training_data[[
+#                 "time_delta", "m_time", "m_day"]].copy()
+            training_feature = training_data[[
+                "time_delta"]].copy()
             training_label = training_data["label"].copy()
 
             validation_data = dataset.tail(data_size - training_data_size)
-            validation_feature = validation_data["time_delta"].copy()
+#             validation_feature = validation_data[[
+#                 "time_delta", "m_time", "m_day"]].copy()
+            validation_feature = validation_data[[
+                "time_delta"]].copy()
             validation_label = validation_data["label"].copy()
 
             classes = dataset.groupby("label")

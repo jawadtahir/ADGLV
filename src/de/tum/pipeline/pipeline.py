@@ -13,6 +13,7 @@ from de.tum.pipeline.models import Pipeline
 from de.tum.steps.data_collection import DataCollectionStep
 from de.tum.steps.data_collection_with_ques import DataCollectionStepQ
 from de.tum.steps.feature_vector_generation import FeatureVectorGeneration
+from de.tum.steps.pre_visualization import PreVisualization
 from de.tum.steps.training import ADGLVDNNClassifier
 from de.tum.util.Constants import NODES_YAML_PATH, NODES_LIST
 
@@ -45,8 +46,7 @@ class FeatureGenPipeline(Pipeline):
         node_path = os.environ.get(NODES_YAML_PATH, str(
             os.path.join("/ADGLV", "config", "nodes.yaml")))
         nodes = yaml.load(open(node_path))
-        self.steps = [FeatureVectorGeneration(
-            "feat_vec_step", nodes[NODES_LIST])]
+        self.steps = [FeatureVectorGeneration(nodes[NODES_LIST])]
 
 
 class ExDNN(Pipeline):
@@ -56,8 +56,8 @@ class ExDNN(Pipeline):
             os.path.join("/ADGLV", "config", "nodes.yaml")))
         nodes = yaml.load(open(node_path))
         self.steps = [
-            FeatureVectorGeneration("feat_vec_step", nodes[NODES_LIST]),
-            ADGLVDNNClassifier("adglv_dnn_classifier")
+            FeatureVectorGeneration(nodes[NODES_LIST]),
+            ADGLVDNNClassifier()
         ]
 
 
@@ -65,5 +65,12 @@ class DNNOnly(Pipeline):
     def __init__(self):
         Pipeline.__init__(self, None, None, None)
         self.steps = [
-            ADGLVDNNClassifier("adglv_dnn_classifier")
+            ADGLVDNNClassifier()
         ]
+
+
+class VizPip(Pipeline):
+    def __init__(self):
+        Pipeline.__init__(self, None, None, None)
+        self.steps = [
+            PreVisualization()]

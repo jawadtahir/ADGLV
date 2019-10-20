@@ -33,5 +33,21 @@ def get_logger(package_name):
     return logger
 
 
+def empty_dir(dir_path):
+    if os.path.exists(dir_path):
+
+        for file_fd in os.listdir(dir_path):
+            file_path = os.path.join(dir_path, file_fd)
+
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(e)
+    else:
+
+        os.mkdir(dir_path)
+
+
 if __name__ == '__main__':
     pass

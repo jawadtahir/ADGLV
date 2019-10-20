@@ -76,3 +76,7 @@ config/nodes\.yaml
 docker-compose-mongo\.yml
 
 docker-compose\.yml
+
+viz/
+feat/
+data/

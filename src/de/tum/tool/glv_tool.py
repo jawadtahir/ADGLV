@@ -5,7 +5,7 @@ Created on Aug 15, 2019
 '''
 
 from de.tum.pipeline.pipeline import TestPipelineQ, FeatureGenPipeline, DNNOnly,\
-    ExDNN
+    ExDNN, VizPip
 from de.tum.util.utils import get_logger
 
 
@@ -23,7 +23,7 @@ class GLVTool(object):
     def execute_pipeline(self):
 
         self._log.debug('Creating pipeline')
-        pipeline = ExDNN()
+        pipeline = VizPip()
 
         self._log.debug('Executing pipeline')
         pipeline.execute()
