@@ -72,10 +72,12 @@ class PreVisualization(Step):
                 for day in days:
                     day_counter += 1
                     d_measurement = day_groups.get_group(day)
-                    plt.subplot(2, 4, day_counter)
+                    avg_data = d_measurement.groupby(
+                        np.arange(len(d_measurement)) // 60).mean()
+                    plt.subplot(4, 2, day_counter)
                     plt.title(day)
                     plt.axis('off')
-                    plt.plot(d_measurement["time_delta"])
+                    plt.plot(avg_data["time_delta"])
 
                 plt.savefig(os.path.join(
                     base_dir, str(landmark) + ".png"))

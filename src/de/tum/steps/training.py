@@ -42,8 +42,11 @@ class ADGLVDNNClassifier(Step):
         '''
         feature_csv_dir = os.environ.get(
             FEATURE_CSV_DIR, os.path.join("/ADGLV", "feat"))
+        self._log.debug("Feature CSV Dir: " + feature_csv_dir)
+
         dataset_training_ratio = os.environ.get(
-            TRAIN_DATASET_TRAINING_RATIO, 0.8)
+            TRAIN_DATASET_TRAINING_RATIO, 0.75)
+
         percentile_upper_limit = os.environ.get(
             TRAIN_DATASET_UPPER_CUT_OFF, 0.99)
         percentile_lower_limit = os.environ.get(
@@ -51,7 +54,6 @@ class ADGLVDNNClassifier(Step):
 
         self.training_ratio = dataset_training_ratio
 
-        self._log.debug("Feature CSV Dir: " + feature_csv_dir)
         self._log.debug("Datatset cleaning upper limit: " +
                         percentile_upper_limit)
         self._log.debug("Datatset cleaning lower limit: " +
