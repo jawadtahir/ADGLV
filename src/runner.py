@@ -24,3 +24,5 @@ if __name__ == "__main__":
     # time.sleep(10)
 
     GLVTool().execute_pipeline()
+
+# /home/foobar/eclipse-workspace/Thesis/data/2019-11-02 02:53:34.449501

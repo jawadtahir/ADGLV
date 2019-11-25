@@ -3,24 +3,19 @@ Created on Sep 22, 2019
 
 @author: foobar
 '''
-import math
+from datetime import datetime as dt
 import os
 from traceback import print_exc
-
-from sklearn import metrics
-from tensorflow.python.data import Dataset
 
 
 from de.tum.steps.models import Step
 from de.tum.util.Constants import *
-from de.tum.util.utils import get_logger
+from de.tum.util.utils import get_logger, create_dirs, empty_dir, my_input_fn,\
+    construct_feature_columns
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-
-
-DAYS_VOCAB = {"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
 
 
 class ADGLVDNNClassifier(Step):
@@ -34,111 +29,66 @@ class ADGLVDNNClassifier(Step):
         '''
         super().__init__("adglv_dnn_classifier")
         self._log = get_logger(__name__)
-        self.base_loc_data_map = {}
 
     def pre_work(self):
         '''
-        Perform data cleaning
+        Get config from env vars and perform data cleaning
         '''
+        # get feature vector directory
         feature_csv_dir = os.environ.get(
             FEATURE_CSV_DIR, os.path.join("/ADGLV", "feat"))
-        self._log.debug("Feature CSV Dir: " + feature_csv_dir)
+        self._log.debug("Feature CSV Dir: " + str(feature_csv_dir))
 
+        # Ratio of training dataset. Remaining will be used for validation
         dataset_training_ratio = os.environ.get(
             TRAIN_DATASET_TRAINING_RATIO, 0.75)
+        self.training_ratio = float(dataset_training_ratio)
+        self._log.debug("Training ratio: " + str(self.training_ratio))
 
-        percentile_upper_limit = os.environ.get(
-            TRAIN_DATASET_UPPER_CUT_OFF, 0.99)
-        percentile_lower_limit = os.environ.get(
-            TRAIN_DATASET_LOWER_CUT_OFF, 0.01)
+        # Learning rate for the classsifier
+        self.learning_rate = os.environ.get(TRAIN_LEARNING_RATE, "0.01")
+        self.learning_rate = float(self.learning_rate)
+        self._log.debug("Learning rate: " + str(self.learning_rate))
 
-        self.training_ratio = dataset_training_ratio
+        # Batch size
+        self.batch_size = os.environ.get(TRAIN_BATCH_SIZE, "10")
+        self.batch_size = int(self.batch_size)
+        self._log.debug("Batch size: " + str(self.batch_size))
 
-        self._log.debug("Datatset cleaning upper limit: " +
-                        percentile_upper_limit)
-        self._log.debug("Datatset cleaning lower limit: " +
-                        percentile_lower_limit)
+        # Number of training steps
+        self.steps = os.environ.get(TRAIN_STEPS, "500")
+        self.steps = int(self.steps)
+        self._log.debug("Training steps: " + str(self.steps))
 
-        self.base_locs = os.environ[TRAIN_NODES_CSV]
-        self.base_locs = [base_loc.strip()
-                          for base_loc in self.base_locs.split(",")]
-        self._log.debug("Base locations: " + str(self.base_locs))
+        # Hidden layers nodes
+        hidden_units_csv = os.environ.get(
+            TRAIN_HIDDEN_UNITS, "20,20,20,20,20")
+        self.hidden_units = [int(unit) for unit in hidden_units_csv.split(",")]
+        self._log.debug("Hidden units: " + str(self.hidden_units))
 
-        for base_loc in self.base_locs:
-            csv_path = os.path.join(feature_csv_dir, base_loc + ".csv")
-            dataset = pd.read_csv(csv_path)
-            dataset = dataset.reindex(np.random.permutation(dataset.index))
-            print(dataset)
-            groups = dataset.groupby("label")
-            landmarks = groups.groups.keys()
-            for landmark in landmarks:
+        # Training directory to store figures and models
+        self.train_dir = os.environ.get(
+            TRAIN_ROOT_DIR, os.path.join("/ADGLV", "train"))
+        self._log.debug("Training root dir: " + str(self.train_dir))
+        create_dirs(self.train_dir)
+        empty_dir(self.train_dir)
 
-                landmark_measurement = groups.get_group(landmark)
+        self.exe_dir = os.path.join(self.train_dir, str(dt.utcnow()))
+        create_dirs(self.exe_dir)
+        self._log.debug("Execution dir: " + str(self.exe_dir))
 
-                limits = landmark_measurement["time_delta"].quantile(
-                    [percentile_lower_limit, percentile_upper_limit])
+        # Get CSV path
+        csv_path = os.path.join(feature_csv_dir, "features.csv")
+        dataset = pd.read_csv(csv_path)
+        self.dataset = dataset.reindex(np.random.permutation(dataset.index))
+        self._log.debug(self.dataset)
 
-                filtered_data_ids = landmark_measurement["time_delta"].between(
-                    limits[percentile_lower_limit], limits[percentile_upper_limit], True)
-                filtered_data = landmark_measurement[filtered_data_ids]
-
-                if self.base_loc_data_map.get(base_loc) is not None:
-                    self.base_loc_data_map[base_loc].append(filtered_data)
-                else:
-                    self.base_loc_data_map[base_loc] = [filtered_data]
-
-#                 landmark_measurement.hist(column="time_delta")
-#                 filtered_data.hist(column="time_delta")
-
-            self.base_loc_data_map[base_loc] = pd.concat(
-                self.base_loc_data_map[base_loc])
-
-            print(base_loc)
+        # Get number of periods
+        periods = os.environ.get(TRAIN_PERIODS, "50")
+        self._log.debug("Training periods: " + periods)
+        self.periods = int(periods)
 
     def work(self, **kwargs):
-        def my_input_fn(features, targets, batch_size=1, shuffle=False, num_epochs=None):
-            """Trains a neural net classification model.
-
-            Args:
-              features: pandas DataFrame of features
-              targets: pandas DataFrame of targets
-              batch_size: Size of batches to be passed to the model
-              shuffle: True or False. Whether to shuffle the data.
-              num_epochs: Number of epochs for which data should be repeated. None = repeat indefinitely
-            Returns:
-              Tuple of (features, labels) for next data batch
-            """
-
-            # Convert pandas data into a dict of np arrays.
-            features = {key: np.array(value)
-                        for key, value in dict(features).items()}
-#             features = {"time_delta": np.array(features)}
-
-            targets = np.array(targets)
-
-            # Construct a dataset, and configure batching/repeating.
-            ds = None
-            ds = Dataset.from_tensor_slices(
-                (features, targets))  # warning: 2GB limit
-
-            ds = ds.batch(batch_size).repeat(num_epochs)
-
-            # Shuffle the data, if specified.
-            if shuffle:
-                ds = ds.shuffle(10000)
-
-            # Return the next batch of data.
-            features, labels = ds.make_one_shot_iterator().get_next()
-            return features, labels
-
-        def construct_feature_columns(input_features):
-            """Construct the TensorFlow Feature Columns.
-            Args:
-                input_features: The names of the numerical input features to use.
-            Returns:
-                A set of feature columns
-            """
-            return set([tf.feature_column.numeric_column(my_feature) for my_feature in input_features])
 
         def train_nn_regression_model(
                 learning_rate,
@@ -153,7 +103,7 @@ class ADGLVDNNClassifier(Step):
             """Trains a neural network Classification model.
 
             In addition to training, this function also prints training progress information,
-            as well as a plot of the training and validation loss over time.
+            as well as a plot of the accuracy loss over time.
 
             Args:
               learning_rate: A `float`, the learning rate.
@@ -171,25 +121,17 @@ class ADGLVDNNClassifier(Step):
                 `california_housing_dataframe` to use as target for validation.
 
             Returns:
-              A `DNNRegressor` object trained on the training data.
+              A `DNNClassifier` object trained on the training data.
             """
 
-            periods = 10
-            steps_per_period = steps / periods
+            steps_per_period = steps / self.periods
 
-#             optimizer = tf.keras.optimizers.Adagrad(
-#                 learning_rate=learning_rate)
-
-            feat_cat_col = tf.feature_column.categorical_column_with_vocabulary_list(
-                "m_day", DAYS_VOCAB)
-
-            dnn_regressor = tf.estimator.DNNClassifier(
-                feature_columns=[
-                    tf.feature_column.numeric_column("time_delta"), ],
-                #                     tf.feature_column.numeric_column("m_time"), ],
-                #                     tf.feature_column.indicator_column(feat_cat_col)],
+            self._log.debug("Creating classifier...")
+            dnn_classifier = tf.estimator.DNNClassifier(
+                feature_columns=construct_feature_columns(training_examples),
                 hidden_units=hidden_units,
                 n_classes=n_classes,
+                model_dir=self.exe_dir,
                 optimizer=tf.train.AdagradOptimizer(
                     learning_rate=learning_rate)
             )
@@ -201,103 +143,135 @@ class ADGLVDNNClassifier(Step):
 
             def predict_training_input_fn(): return my_input_fn(training_examples,
                                                                 training_targets,
-                                                                num_epochs=1,
-                                                                shuffle=False)
+                                                                batch_size=10,
+                                                                num_epochs=1)
 
             def predict_validation_input_fn(): return my_input_fn(validation_examples,
                                                                   validation_targets,
-                                                                  num_epochs=1,
-                                                                  shuffle=False)
+                                                                  batch_size=10,
+                                                                  num_epochs=1)
 
             # Train the model, but do so inside a loop so that we can periodically assess
             # loss metrics.
             print("Training model...")
-            print("RMSE (on training data):")
-            training_rmse = []
-            validation_rmse = []
-            for period in range(0, periods):
+            print("Accuracies (on validation data):")
+
+            self._log.debug("Training model...")
+            self._log.debug("Accuracies (on validation data):")
+
+            training_accuracies = []
+            validation_accuracies = []
+
+            for period in range(0, self.periods):
                 # Train the model, starting from the prior state.
-                dnn_regressor.train(
+                dnn_classifier.train(
                     input_fn=training_input_fn,
                     steps=steps_per_period
                 )
-                # Take a break and compute predictions.
-                training_predictions = dnn_regressor.evaluate(
+                # Take a break and predict
+                training_predictions = dnn_classifier.evaluate(
                     input_fn=predict_training_input_fn)
-                training_predictions = training_predictions['accuracy']
+                training_predictions_accuracy = training_predictions['accuracy']
 
-                validation_predictions = dnn_regressor.evaluate(
+                validation_predictions = dnn_classifier.evaluate(
                     input_fn=predict_validation_input_fn)
-                validation_predictions = validation_predictions['accuracy']
+                validation_predictions_accuracy = validation_predictions['accuracy']
 
-                # Compute training and validation loss.
-#                 training_root_mean_squared_error = math.sqrt(
-# metrics.mean_squared_error(training_predictions, training_targets))
-                training_root_mean_squared_error = training_predictions
-
-#                 validation_root_mean_squared_error = math.sqrt(
-# metrics.mean_squared_error(validation_predictions, validation_targets))
-                validation_root_mean_squared_error = validation_predictions
-                # Occasionally print the current loss.
+                # Print the current accuracy.
                 print("  period %02d : %0.2f" %
-                      (period, training_root_mean_squared_error))
+                      (period, validation_predictions_accuracy))
+                self._log.debug("  period %02d : %0.2f" %
+                                (period, validation_predictions_accuracy))
+
                 # Add the loss metrics from this period to our list.
-                training_rmse.append(training_root_mean_squared_error)
-                validation_rmse.append(validation_root_mean_squared_error)
+                training_accuracies.append(training_predictions_accuracy)
+                validation_accuracies.append(validation_predictions_accuracy)
             print("Model training finished.")
+            self._log.debug("Model training finished.")
 
+            self._log.debug("Creating accuracy graph")
             # Output a graph of loss metrics over periods.
-            plt.ylabel("RMSE")
+            plt.figure()
+            plt.ylabel("Accuracy")
             plt.xlabel("Periods")
-            plt.title("Root Mean Squared Error vs. Periods")
+            plt.title("Accuracy vs. Periods")
             plt.tight_layout()
-            plt.plot(training_rmse, label="training")
-            plt.plot(validation_rmse, label="validation")
+            plt.plot(training_accuracies, label="training")
+            plt.plot(validation_accuracies, label="validation")
             plt.legend()
+            plt.savefig(os.path.join(self.train_dir, "accuracy.png"))
+            plt.savefig(os.path.join(self.exe_dir, "accuracy.png"))
 
-            print("Final RMSE (on training data):   %0.2f" %
-                  training_root_mean_squared_error)
-            print("Final RMSE (on validation data): %0.2f" %
-                  validation_root_mean_squared_error)
+            print("Final accuracy (on training data):   %0.2f" %
+                  training_accuracies[-1])
+            print("Final accuracy (on validation data): %0.2f" %
+                  validation_accuracies[-1])
+            self._log.debug("Final accuracy (on training data):   %0.2f" %
+                            training_accuracies[-1])
+            self._log.debug("Final accuracy (on validation data): %0.2f" %
+                            validation_accuracies[-1])
 
-            return dnn_regressor
+            self._log.debug("Saving model")
+#             dnn_classifier.save(os.path.join(self.train_dir, "model.h5"))
+#             dnn_classifier.save(os.path.join(self.exe_dir, "model.h5"))
 
-        for base_loc, dataset in self.base_loc_data_map.items():
+            return dnn_classifier
 
-            learning_rate = os.environ.get(TRAIN_LEARNING_RATE, "0.01")
-            learning_rate = float(learning_rate)
+#         for base_loc, dataset in self.base_loc_data_map.items():
 
-            batch_size = os.environ.get(TRAIN_BATCH_SIZE, "10")
-            batch_size = int(batch_size)
+#         dataset = dataset.reindex(np.random.permutation(dataset.index))
 
-            steps = os.environ.get(TRAIN_STEPS, "500")
-            steps = int(steps)
+        data_size = len(self.dataset)
+        self._log.debug("Dataset size: " + str(data_size))
 
-            hidden_units_csv = os.environ.get(
-                TRAIN_HIDDEN_UNITS, "10,10,10,10,10")
-            hidden_units = [int(unit) for unit in hidden_units_csv.split(",")]
+        # Get training data size
+        training_data_size = int(data_size * self.training_ratio)
+        self._log.debug("Training dataset size: " + str(data_size))
 
-            dataset = dataset.reindex(np.random.permutation(dataset.index))
+        training_data = self.dataset.head(training_data_size)
 
-            data_size = len(dataset)
-            training_data_size = int(data_size * self.training_ratio)
+        # Get training features. First is index and last is label so we ommit
+        # them
+        training_feats = training_data.columns[1:len(
+            training_data.columns) - 1]
 
-            training_data = dataset.head(training_data_size)
-#             training_feature = training_data[[
-#                 "time_delta", "m_time", "m_day"]].copy()
-            training_feature = training_data[[
-                "time_delta"]].copy()
-            training_label = training_data["label"].copy()
+        # Create features and labels
+        training_feature = training_data[training_feats].copy()
+        training_label = training_data["labels"].copy()
 
-            validation_data = dataset.tail(data_size - training_data_size)
-#             validation_feature = validation_data[[
-#                 "time_delta", "m_time", "m_day"]].copy()
-            validation_feature = validation_data[[
-                "time_delta"]].copy()
-            validation_label = validation_data["label"].copy()
+        # Get validation dataset
+        self._log.debug("Validation dataset size: " +
+                        str(data_size - training_data_size))
+        validation_data = self.dataset.tail(data_size - training_data_size)
 
-            classes = dataset.groupby("label")
-            num_classes = len(classes.groups.keys())
+        validation_feature = validation_data[training_feats].copy()
+        validation_label = validation_data["labels"].copy()
 
-            train_nn_regression_model(learning_rate, steps, batch_size, hidden_units, num_classes,
-                                      training_feature, training_label, validation_feature, validation_label)
+        classes = self.dataset.groupby("labels")
+        num_classes = len(classes.groups.keys())
+
+        # Start training
+        train_nn_regression_model(self.learning_rate, self.steps, self.batch_size, self.hidden_units, num_classes,
+                                  training_feature, training_label, validation_feature, validation_label)
+
+        self.validation_test(validation_feature,
+                             validation_label,
+                             n_classes=num_classes,
+                             learning_rate=self.learning_rate)
+
+    def validation_test(self, feat, label, n_classes, learning_rate):
+        model = tf.estimator.DNNClassifier(feature_columns=construct_feature_columns(feat),
+                                           hidden_units=self.hidden_units,
+                                           n_classes=n_classes,
+                                           optimizer=tf.train.AdagradOptimizer(
+                                               learning_rate=learning_rate),
+                                           warm_start_from=self.exe_dir)
+
+        def val_fn(): return my_input_fn(feat, label, batch_size=10, num_epochs=1)
+
+        for _ in range(2):
+            ev = model.evaluate(val_fn)
+            print(ev["accuracy"])
+
+        a = model.predict(val_fn)
+        print(a)

@@ -1,2 +1,6 @@
 *.pem
 *.log
+config/*
+feat/*
+viz/*
+data/*
