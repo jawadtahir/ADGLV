@@ -203,56 +203,7 @@ class SSHProbeClient(SSHClient):
 
         t.start_client(timeout=timeout)
 
-#         print(t.t0)
-#         print(t.t1 - t.t0)
-#         print(t.t2 - t.t1)
-#         print(t.t3 - t.t2)
-#         print(t.t4 - t.t3)
-#         print(t.t5 - t.t4)
-
         self.close()
 
         delay = SSHDelay(t.t0, t.t1, t.t2, t.t3, t.t4, t.t5)
         return delay
-#
-#
-#         # If GSS-API Key Exchange is performed we are not required to check the
-#         # host key, because the host is authenticated via GSS-API / SSPI as
-#         # well as our client.
-#         if not self._transport.gss_kex_used:
-#             server_key = t.get_remote_server_key()
-#             if our_server_keys is None:
-#                 # will raise exception if the key is rejected
-#                 self._policy.missing_host_key(
-#                     self, server_hostkey_name, server_key
-#                 )
-#             else:
-#                 our_key = our_server_keys.get(server_key.get_name())
-#                 if our_key != server_key:
-#                     if our_key is None:
-#                         our_key = list(our_server_keys.values())[0]
-#                     raise BadHostKeyException(hostname, server_key, our_key)
-#
-#         if username is None:
-#             username = getpass.getuser()
-#
-#         if key_filename is None:
-#             key_filenames = []
-#         elif isinstance(key_filename, string_types):
-#             key_filenames = [key_filename]
-#         else:
-#             key_filenames = key_filename
-#
-#         self._auth(
-#             username,
-#             password,
-#             pkey,
-#             key_filenames,
-#             allow_agent,
-#             look_for_keys,
-#             gss_auth,
-#             gss_kex,
-#             gss_deleg_creds,
-#             t.gss_host,
-#             passphrase,
-#         )

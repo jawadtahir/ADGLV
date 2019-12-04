@@ -5,27 +5,6 @@ Created on May 21, 2019
 '''
 
 
-class Config(object):
-    '''
-    classdocs
-    '''
-
-    def __init__(self):
-        '''
-        Constructor
-        '''
-        super(Config, self).__init__()
-        self.name = ""
-        self.nodes_list = [
-            "40.87.94.96",
-            "52.166.8.96"
-        ]
-        self.nodes_map = {
-            "East1US1": "40.87.94.96",
-            "WestEU1": "52.166.8.96"
-        }
-
-
 class Measurement(object):
     def __init__(self, node_name, dest_name, r_time, m_time, m_val, m_type):
         self.node_name = node_name

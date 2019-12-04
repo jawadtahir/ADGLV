@@ -16,18 +16,19 @@ import pandas as pd
 
 
 class FeatureVectorGeneration(Step):
-    def __init__(self):
+    def __init__(self, timestamp):
         super().__init__("feat_vec_step")
         self._log = get_logger(__name__)
+        self.timestamp = timestamp
 
     def pre_work(self):
         def get_env_vars():
             # Format YYYY-MM-DD HH:MM
-            self.date_start = os.environ.get(FEATURE_DATA_START, dt.min)
+            self.date_start = os.environ.get(FEATURE_DATA_START, str(dt.min))
             self._log.debug("Start date: " + str(self.date_start))
 
             # Format YYYY-MM-DD HH:MM
-            self.date_end = os.environ.get(FEATURE_DATA_END, dt.max)
+            self.date_end = os.environ.get(FEATURE_DATA_END, str(dt.max))
             self._log.debug("End date: " + str(self.date_end))
 
             self.mongo_host = os.environ.get(MONGO_HOST, "localhost")
@@ -41,8 +42,26 @@ class FeatureVectorGeneration(Step):
                 FEATURE_CSV_DIR, os.path.join("/ADGLV", "feat"))
             self._log.debug("Feature Directory: " + self.csv_dir)
 
-            self.exe_dir = os.path.join(self.csv_dir, str(dt.utcnow()))
+            self.exe_dir = os.path.join(self.csv_dir, str(self.timestamp))
+            self.exe_dir = self.exe_dir.split(".")[0]
             self._log.debug("Execution Directory: " + self.exe_dir)
+
+            self.database_name = os.environ.get(DATABASE_NAME, "thesis")
+            self._log.debug("Database name: " + self.database_name)
+
+            self.collection_name = os.environ.get(
+                COLLECTION_NAME, "data_collection")
+            self._log.debug("Collection name: " + self.collection_name)
+
+            self.percentile_upper_limit = float(
+                os.environ.get(FEATURE_DATASET_UPPER_CUT_OFF, 0))
+            self.percentile_lower_limit = float(
+                os.environ.get(FEATURE_DATASET_LOWER_CUT_OFF, 0))
+
+            self._log.debug("Percentile upper limit: " +
+                            str(self.percentile_upper_limit))
+            self._log.debug("Percentile lower limit: " +
+                            str(self.percentile_lower_limit))
 
         get_env_vars()
         self._log.debug("Creating Feature Dictionary...")
@@ -54,12 +73,21 @@ class FeatureVectorGeneration(Step):
 
     def work(self, **kwargs):
 
+        def clean_data(dataframe, upper_limit, lower_limit):
+            limits = dataframe["time_deltas"].quantile(
+                [upper_limit, lower_limit])
+            clean_data_ids = dataframe["time_deltas"].between(
+                limits[lower_limit], limits[upper_limit], True)
+            cleaned_data = dataframe[clean_data_ids]
+
+            return cleaned_data.copy()
+
         query_filter = {"m_time": {
             "$gte": self.date_start, "$lte": self.date_end}}
         self._log.debug("Connecting MongoDB...")
         with MongoClient(self.mongo_host, self.mongo_port) as db_client:
-            db = db_client['thesis']
-            collection = db['trans_data']
+            db = db_client[self.database_name]
+            collection = db[self.collection_name]
 
             self._log.debug("Running query...")
             measurments = collection.find(
@@ -118,6 +146,9 @@ class FeatureVectorGeneration(Step):
 
                     # Get the name of target machine
                     label = measurment["dest_name"].strip()
+#                     if self.relay_map.get(label):
+#                         label = self.relay_map.get(label)
+
                     label = label[len(label) - 2:]
 
                 except Exception as e:
@@ -160,6 +191,10 @@ class FeatureVectorGeneration(Step):
             for location in locations:
                 # Get measurement set for each base location
                 df_per_location = dfg_per_location.get_group(location)
+                # optionally clean it
+                if self.percentile_upper_limit > 0 and self.percentile_lower_limit > 0:
+                    df_per_location = clean_data(
+                        df_per_location, self.percentile_upper_limit, self.percentile_lower_limit)
                 # Group by timestamp
                 measurement_group = df_per_location.groupby([
                     "m_months", "m_dates", "m_hours", "m_minutes"])
@@ -188,4 +223,15 @@ class FeatureVectorGeneration(Step):
             dataset.to_csv(csv_path)
 
     def post_work(self):
-        pass
+        ticket_path = os.path.join(self.exe_dir, "ticket.txt")
+        with open(ticket_path, "w") as ticket_fd:
+            ticket_fd.write("Start date: " + str(self.date_start) + "\n")
+            ticket_fd.write("End date: " + str(self.date_end) + "\n")
+            ticket_fd.write("Mongo Host: " + str(self.mongo_host) + "\n")
+            ticket_fd.write("Mongo Port: " + str(self.mongo_port) + "\n")
+            ticket_fd.write("Database name: " + self.database_name + "\n")
+            ticket_fd.write("Collection name: " + self.collection_name + "\n")
+            ticket_fd.write("Percentile upper limit: " +
+                            str(self.percentile_upper_limit) + "\n")
+            ticket_fd.write("Percentile lower limit: " +
+                            str(self.percentile_lower_limit) + "\n")

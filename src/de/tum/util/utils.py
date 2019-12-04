@@ -6,7 +6,6 @@ Created on Aug 29, 2019
 import logging
 import os
 
-from tensorflow.python.data import Dataset
 
 from de.tum.util.Constants import LOG_FILE_PATH
 import numpy as np
@@ -67,36 +66,6 @@ def construct_feature_columns(input_features):
         A set of feature columns
     """
     return set([tf.feature_column.numeric_column(my_feature) for my_feature in input_features])
-
-
-def my_input_fn(features, targets, batch_size=1, num_epochs=None):
-    """Get dataset.
-
-    Args:
-      features: pandas DataFrame of features
-      targets: pandas DataFrame of targets
-      batch_size: Size of batches to be passed to the model
-      num_epochs: Number of epochs for which data should be repeated. None = repeat indefinitely
-    Returns:
-      Tuple of (features, labels) for next data batch
-    """
-
-    # Convert pandas data into a dict of np arrays.
-    features = {key: np.array(value)
-                for key, value in dict(features).items()}
-
-    targets = np.array(targets)
-
-    # Construct a dataset, and configure batching/repeating.
-    ds = None
-    ds = Dataset.from_tensor_slices(
-        (features, targets))  # warning: 2GB limit
-
-    ds = ds.batch(batch_size).repeat(num_epochs)
-
-    # Return the next batch of data.
-    features, labels = ds.make_one_shot_iterator().get_next()
-    return features, labels
 
 
 if __name__ == '__main__':

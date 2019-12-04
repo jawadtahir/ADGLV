@@ -19,7 +19,7 @@ class Pipeline(object):
         self.log = get_logger(__name__)
 
     def execute(self):
-        self.log.debug("Executing test_pipeline steps...")
+        self.log.debug("Executing pipeline steps...")
         for step in self.steps:
             self.log.debug("Step : " + step.get_name())
 

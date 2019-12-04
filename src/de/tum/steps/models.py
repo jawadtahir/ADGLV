@@ -44,10 +44,11 @@ class Step(ABC):
 
 
 class CollectionTaskMessage():
-    def __init__(self, request_node_id: str, request_time: datetime, target_node_name: str, target_node_addr: str, target_node_pkey_path: str=None, target_node_pkey_passphrase: str=None):
+    def __init__(self, request_node_id: str, request_time: datetime, target_node_name: str, target_node_addr: str, target_node_port: int, target_node_pkey_path: str=None, target_node_pkey_passphrase: str=None):
         self.request_node_id = request_node_id
         self.request_time = request_time
         self.target_node_name = target_node_name
         self.target_node_addr = target_node_addr
+        self.target_node_port = target_node_port
         self.target_node_pkey_path = target_node_pkey_path
         self.target_node_pkey_passphrase = target_node_pkey_passphrase

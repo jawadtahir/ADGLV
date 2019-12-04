@@ -3,15 +3,14 @@ Created on Sep 22, 2019
 
 @author: foobar
 '''
-from datetime import datetime as dt
 import os
 from traceback import print_exc
 
+from tensorflow.python.data import Dataset
 
 from de.tum.steps.models import Step
 from de.tum.util.Constants import *
-from de.tum.util.utils import get_logger, create_dirs, empty_dir, my_input_fn,\
-    construct_feature_columns
+from de.tum.util.utils import get_logger, create_dirs, empty_dir, construct_feature_columns
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -23,12 +22,13 @@ class ADGLVDNNClassifier(Step):
     DNN classifier for the 
     '''
 
-    def __init__(self):
+    def __init__(self, timestamp):
         '''
         Constructor
         '''
         super().__init__("adglv_dnn_classifier")
         self._log = get_logger(__name__)
+        self.timestamp = timestamp
 
     def pre_work(self):
         '''
@@ -73,7 +73,15 @@ class ADGLVDNNClassifier(Step):
         create_dirs(self.train_dir)
         empty_dir(self.train_dir)
 
-        self.exe_dir = os.path.join(self.train_dir, str(dt.utcnow()))
+        # Model directory to store model
+        self.model_dir = os.environ.get(
+            TRAIN_MODEL_DIR, os.path.join("/ADGLV", "model"))
+        self._log.debug("Model dir: " + str(self.model_dir))
+        create_dirs(self.model_dir)
+        empty_dir(self.model_dir)
+
+        self.exe_dir = os.path.join(self.train_dir, str(self.timestamp))
+        self.exe_dir = self.exe_dir.split(".")[0]
         create_dirs(self.exe_dir)
         self._log.debug("Execution dir: " + str(self.exe_dir))
 
@@ -89,6 +97,35 @@ class ADGLVDNNClassifier(Step):
         self.periods = int(periods)
 
     def work(self, **kwargs):
+
+        def my_input_fn(features, targets, batch_size=1, num_epochs=None):
+            """Get dataset.
+
+            Args:
+              features: pandas DataFrame of features
+              targets: pandas DataFrame of targets
+              batch_size: Size of batches to be passed to the model
+              num_epochs: Number of epochs for which data should be repeated. None = repeat indefinitely
+            Returns:
+              Tuple of (features, labels) for next data batch
+            """
+
+            # Convert pandas data into a dict of np arrays.
+            features = {key: np.array(value)
+                        for key, value in dict(features).items()}
+
+            targets = np.array(targets)
+
+            # Construct a dataset, and configure batching/repeating.
+            ds = None
+            ds = Dataset.from_tensor_slices(
+                (features, targets))  # warning: 2GB limit
+
+            ds = ds.batch(batch_size).repeat(num_epochs)
+
+            # Return the next batch of data.
+            features, labels = ds.make_one_shot_iterator().get_next()
+            return features, labels
 
         def train_nn_regression_model(
                 learning_rate,
@@ -131,7 +168,7 @@ class ADGLVDNNClassifier(Step):
                 feature_columns=construct_feature_columns(training_examples),
                 hidden_units=hidden_units,
                 n_classes=n_classes,
-                model_dir=self.exe_dir,
+                model_dir=self.model_dir,
                 optimizer=tf.train.AdagradOptimizer(
                     learning_rate=learning_rate)
             )
@@ -199,7 +236,7 @@ class ADGLVDNNClassifier(Step):
             plt.plot(training_accuracies, label="training")
             plt.plot(validation_accuracies, label="validation")
             plt.legend()
-            plt.savefig(os.path.join(self.train_dir, "accuracy.png"))
+#             plt.savefig(os.path.join(self.train_dir, "accuracy.png"))
             plt.savefig(os.path.join(self.exe_dir, "accuracy.png"))
 
             print("Final accuracy (on training data):   %0.2f" %
@@ -211,22 +248,17 @@ class ADGLVDNNClassifier(Step):
             self._log.debug("Final accuracy (on validation data): %0.2f" %
                             validation_accuracies[-1])
 
-            self._log.debug("Saving model")
-#             dnn_classifier.save(os.path.join(self.train_dir, "model.h5"))
-#             dnn_classifier.save(os.path.join(self.exe_dir, "model.h5"))
+            self.training_accuracies = training_accuracies
+            self.validation_accuracies = validation_accuracies
 
             return dnn_classifier
 
-#         for base_loc, dataset in self.base_loc_data_map.items():
-
-#         dataset = dataset.reindex(np.random.permutation(dataset.index))
-
-        data_size = len(self.dataset)
+        data_size = len(self.dataset.index)
         self._log.debug("Dataset size: " + str(data_size))
 
         # Get training data size
         training_data_size = int(data_size * self.training_ratio)
-        self._log.debug("Training dataset size: " + str(data_size))
+        self._log.debug("Training dataset size: " + str(training_data_size))
 
         training_data = self.dataset.head(training_data_size)
 
@@ -251,27 +283,19 @@ class ADGLVDNNClassifier(Step):
         num_classes = len(classes.groups.keys())
 
         # Start training
-        train_nn_regression_model(self.learning_rate, self.steps, self.batch_size, self.hidden_units, num_classes,
-                                  training_feature, training_label, validation_feature, validation_label)
+        model = train_nn_regression_model(self.learning_rate, self.steps, self.batch_size, self.hidden_units, num_classes,
+                                          training_feature, training_label, validation_feature, validation_label)
 
-        self.validation_test(validation_feature,
-                             validation_label,
-                             n_classes=num_classes,
-                             learning_rate=self.learning_rate)
-
-    def validation_test(self, feat, label, n_classes, learning_rate):
-        model = tf.estimator.DNNClassifier(feature_columns=construct_feature_columns(feat),
-                                           hidden_units=self.hidden_units,
-                                           n_classes=n_classes,
-                                           optimizer=tf.train.AdagradOptimizer(
-                                               learning_rate=learning_rate),
-                                           warm_start_from=self.exe_dir)
-
-        def val_fn(): return my_input_fn(feat, label, batch_size=10, num_epochs=1)
-
-        for _ in range(2):
-            ev = model.evaluate(val_fn)
-            print(ev["accuracy"])
-
-        a = model.predict(val_fn)
-        print(a)
+    def post_work(self):
+        text_file_path = os.path.join(self.exe_dir, "ticket.txt")
+        with open(text_file_path, "w") as text_file:
+            text_file.write("Training ratio: " +
+                            str(self.training_ratio) + "\n")
+            text_file.write("Learning rate: " + str(self.learning_rate) + "\n")
+            text_file.write("Batch size: " + str(self.batch_size) + "\n")
+            text_file.write("Hidden units: " + str(self.hidden_units) + "\n")
+            text_file.write("Steps: " + str(self.steps) + "\n")
+            text_file.write("Validation acc: " +
+                            str(self.validation_accuracies) + "\n")
+            text_file.write("Training acc: " +
+                            str(self.training_accuracies) + "\n")
