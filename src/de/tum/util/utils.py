@@ -24,6 +24,10 @@ formatter = logging.Formatter(
 fh.setFormatter(formatter)
 ch.setFormatter(formatter)
 
+DAYS_VOCAB = {"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
+
+CAT_VOCAB_MAPPING = {"m_day": DAYS_VOCAB}
+
 
 def get_logger(package_name):
     logger = logging.getLogger(package_name)
@@ -58,14 +62,24 @@ def create_dirs(dir_path):
         os.makedirs(dir_path, exist_ok=True)
 
 
-def construct_feature_columns(input_features):
+def construct_feature_columns(numeric_features, catagory_features):
     """Construct the TensorFlow Feature Columns.
     Args:
         input_features: The names of the numerical input features to use.
     Returns:
         A set of feature columns
     """
-    return set([tf.feature_column.numeric_column(my_feature) for my_feature in input_features])
+    cat_cols = []
+    num_cols = [tf.feature_column.numeric_column(
+        my_feature) for my_feature in numeric_features]
+    for cat_feat in catagory_features:
+        feat_cat_col = tf.feature_column.categorical_column_with_vocabulary_list(
+            cat_feat, CAT_VOCAB_MAPPING[cat_feat])
+        cat_cols.append(tf.feature_column.indicator_column(feat_cat_col))
+
+    feat_cols = num_cols + cat_cols
+
+    return set(feat_cols)
 
 
 if __name__ == '__main__':

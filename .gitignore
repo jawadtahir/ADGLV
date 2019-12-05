@@ -80,7 +80,7 @@ docker-compose\.yml
 viz/
 feat/
 data/
-model/
+model*/
 predict/
 
 *.bak

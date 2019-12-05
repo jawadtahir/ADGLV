@@ -94,6 +94,7 @@ class FeatureVectorGeneration(Step):
                 filter=query_filter).batch_size(10000)
 
             m_months = []
+            m_weekdays = []
             m_dates = []
             m_hours = []
             m_minutes = []
@@ -112,6 +113,7 @@ class FeatureVectorGeneration(Step):
                     self._log.debug("Processed records: " + str(i))
 
                 m_month = None
+                m_weekday = None
                 m_date = None
                 m_hour = None
                 m_minute = None
@@ -130,6 +132,7 @@ class FeatureVectorGeneration(Step):
                         measurment_time_str, "%Y-%m-%d %H:%M:%S")
 
                     m_month = measurment_time.month
+                    m_weekday = measurment_time.weekday()
                     m_date = measurment_time.day
                     m_hour = measurment_time.hour
                     m_minute = measurment_time.minute
@@ -154,9 +157,11 @@ class FeatureVectorGeneration(Step):
                 except Exception as e:
                     self._log.debug(repr(e))
                     traceback.print_exc(e)
+                    continue
 
                 # Create data arrays
                 m_months.append(m_month)
+                m_weekdays.append(m_weekday)
                 m_dates.append(m_date)
                 m_hours.append(m_hour)
                 m_minutes.append(m_minute)
@@ -169,6 +174,7 @@ class FeatureVectorGeneration(Step):
 
             dataframe = pd.DataFrame(
                 {"m_months": m_months,
+                 "m_weekdays": m_weekdays,
                  "m_dates": m_dates,
                  "m_hours": m_hours,
                  "m_minutes": m_minutes,
@@ -184,7 +190,14 @@ class FeatureVectorGeneration(Step):
 
             # create feature columns
             col_names = ["t" + str(n) for n in range(n_locs - 1)]
+            col_names.append("m_month")
+            col_names.append("m_weekday")
+            col_names.append("m_date")
+            col_names.append("m_hour")
+            col_names.append("m_minute")
             col_names.append("labels")
+
+            self._log.debug("Creating dataset...")
 
             dataset = pd.DataFrame(columns=col_names)
 
@@ -193,24 +206,36 @@ class FeatureVectorGeneration(Step):
                 df_per_location = dfg_per_location.get_group(location)
                 # optionally clean it
                 if self.percentile_upper_limit > 0 and self.percentile_lower_limit > 0:
+                    self._log.debug("Cleaning data... Location: " + location)
                     df_per_location = clean_data(
                         df_per_location, self.percentile_upper_limit, self.percentile_lower_limit)
                 # Group by timestamp
                 measurement_group = df_per_location.groupby([
-                    "m_months", "m_dates", "m_hours", "m_minutes"])
+                    "m_months", "m_weekdays", "m_dates", "m_hours", "m_minutes"])
                 timestamps = measurement_group.groups.keys()
                 # Iterate over timestamps
                 for ts in timestamps:
                     ms = measurement_group.get_group(ts)
-                    ms = ms.sort_values("origins")
-                    td = ms.iloc[:, -2]
+                    # IMPORTANT: keep the order same for each location
+                    mss = ms.sort_values("origins")
+                    td = mss.iloc[:, -2]
                     td = [t for t in td]
                     # We dont have data from all machines for that timestamp
+                    # We will not have data from our location, hence -1
                     if (len(td) != (n_locs - 1)):
                         continue
 
                     j += 1
+                    # Append time stamps
+                    td.append(ts[0])
+                    td.append(ts[1])
+                    td.append(ts[2])
+                    td.append(ts[3])
+                    td.append(ts[4])
+
+                    # Append label
                     td.append(location)
+
                     dataset.loc[len(dataset)] = td
 
             self._log.debug("Total datapoints: " + str(j))

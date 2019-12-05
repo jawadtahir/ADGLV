@@ -85,6 +85,22 @@ class DNNPredictor(Step):
         create_dirs(self.exe_dir)
         self._log.debug("Execution dir: " + str(self.exe_dir))
 
+        # Get numeric features
+        self.numeric_features = os.environ.get(
+            TRAIN_NUMERIC_FEATURES, "t0,t1,t2,t3,t4,t5")
+        self.numeric_features = [x.strip()
+                                 for x in self.numeric_features.split(",")]
+        self._log.debug("Numeric features: " + str(self.numeric_features))
+
+        # Get catagorical features
+        self.catagory_features = os.environ.get(TRAIN_CATAGORY_FEATURES, None)
+        if self.catagory_features is not None:
+            self.catagory_features = [x.strip()
+                                      for x in self.catagory_features.split(",")]
+        else:
+            self.catagory_features = []
+        self._log.debug("Catagory features: " + str(self.catagory_features))
+
     def work(self, **kwargs):
 
         def predict_in_fn(feats):
@@ -154,7 +170,9 @@ class DNNPredictor(Step):
 
         predict_data = self.dataset.head(prediction_size)
 
-        feat_columns = predict_data.columns[1:len(predict_data.columns) - 1]
+#         feat_columns = predict_data.columns[1:len(predict_data.columns) - 1]
+        feat_columns = self.numeric_features + self.catagory_features
+
         features = predict_data[feat_columns].copy()
         expected = predict_data["labels"].copy()
 
@@ -162,7 +180,8 @@ class DNNPredictor(Step):
         num_classes = len(classes.groups.keys())
 
         model = tf.estimator.DNNClassifier(
-            feature_columns=construct_feature_columns(features),
+            feature_columns=construct_feature_columns(
+                self.numeric_features, self.catagory_features),
             hidden_units=self.hidden_units,
             n_classes=num_classes,
             optimizer=tf.train.AdagradOptimizer(
@@ -203,6 +222,10 @@ class DNNPredictor(Step):
         with open(ticket_path, "w") as ticket_fd:
             ticket_fd.write("Prediction ratio: " +
                             str(self.prediction_ratio) + "\n")
+            ticket_fd.write("Numeric features: " +
+                            str(self.numeric_features) + "\n")
+            ticket_fd.write("Catagorical features: " +
+                            str(self.catagory_features) + "\n")
             ticket_fd.write("Total datapoints: " +
                             str(self.total_datapoints) + "\n")
             ticket_fd.write("Correct datapoints: " +

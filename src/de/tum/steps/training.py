@@ -96,6 +96,22 @@ class ADGLVDNNClassifier(Step):
         self._log.debug("Training periods: " + periods)
         self.periods = int(periods)
 
+        # Get numeric features
+        self.numeric_features = os.environ.get(
+            TRAIN_NUMERIC_FEATURES, "t0,t1,t2,t3,t4,t5")
+        self.numeric_features = [x.strip()
+                                 for x in self.numeric_features.split(",")]
+        self._log.debug("Numeric features: " + str(self.numeric_features))
+
+        # Get catagorical features
+        self.catagory_features = os.environ.get(TRAIN_CATAGORY_FEATURES, None)
+        if self.catagory_features is not None:
+            self.catagory_features = [x.strip()
+                                      for x in self.catagory_features.split(",")]
+        else:
+            self.catagory_features = []
+        self._log.debug("Catagory features: " + str(self.catagory_features))
+
     def work(self, **kwargs):
 
         def my_input_fn(features, targets, batch_size=1, num_epochs=None):
@@ -136,7 +152,9 @@ class ADGLVDNNClassifier(Step):
                 training_examples,
                 training_targets,
                 validation_examples,
-                validation_targets):
+                validation_targets,
+                numeric_features,
+                catagory_features):
             """Trains a neural network Classification model.
 
             In addition to training, this function also prints training progress information,
@@ -165,7 +183,8 @@ class ADGLVDNNClassifier(Step):
 
             self._log.debug("Creating classifier...")
             dnn_classifier = tf.estimator.DNNClassifier(
-                feature_columns=construct_feature_columns(training_examples),
+                feature_columns=construct_feature_columns(
+                    numeric_features, catagory_features),
                 hidden_units=hidden_units,
                 n_classes=n_classes,
                 model_dir=self.model_dir,
@@ -264,8 +283,9 @@ class ADGLVDNNClassifier(Step):
 
         # Get training features. First is index and last is label so we ommit
         # them
-        training_feats = training_data.columns[1:len(
-            training_data.columns) - 1]
+#         training_feats = training_data.columns[1:len(
+#             training_data.columns) - 1]
+        training_feats = self.numeric_features + self.catagory_features
 
         # Create features and labels
         training_feature = training_data[training_feats].copy()
@@ -284,7 +304,7 @@ class ADGLVDNNClassifier(Step):
 
         # Start training
         model = train_nn_regression_model(self.learning_rate, self.steps, self.batch_size, self.hidden_units, num_classes,
-                                          training_feature, training_label, validation_feature, validation_label)
+                                          training_feature, training_label, validation_feature, validation_label, self.numeric_features, self.catagory_features)
 
     def post_work(self):
         text_file_path = os.path.join(self.exe_dir, "ticket.txt")
@@ -295,6 +315,10 @@ class ADGLVDNNClassifier(Step):
             text_file.write("Batch size: " + str(self.batch_size) + "\n")
             text_file.write("Hidden units: " + str(self.hidden_units) + "\n")
             text_file.write("Steps: " + str(self.steps) + "\n")
+            text_file.write("Numeric features: " +
+                            str(self.numeric_features) + "\n")
+            text_file.write("Catagorical features: " +
+                            str(self.catagory_features) + "\n")
             text_file.write("Validation acc: " +
                             str(self.validation_accuracies) + "\n")
             text_file.write("Training acc: " +

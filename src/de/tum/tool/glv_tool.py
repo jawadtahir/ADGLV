@@ -54,7 +54,7 @@ class GLVTool(object):
             pipeline = ExDNNPredictor(self.timestamp)
 
         else:
-            pipeline = ExDNNPredictor(self.timestamp)
+            raise ValueError("Wrong phase value")
 
         self._log.debug('Executing pipeline')
         pipeline.execute()

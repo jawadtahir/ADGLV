@@ -4,5 +4,5 @@ config/*
 feat/*
 viz/*
 data/*
-model/*
+model*/*
 predict/*
